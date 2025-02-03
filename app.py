@@ -4,15 +4,13 @@ from transformers import pipeline
 
 app = Flask(__name__)
 
-# Configure CORS to allow requests from your Netlify domain
-CORS(app, resources={
-    r"/*": {  # Apply to all routes
-        "origins": ["https://ai-web3.netlify.app"],  # Your Netlify domain
-        "methods": ["GET", "POST", "OPTIONS"],  # Allow these methods
-        "allow_headers": ["Content-Type"],
-        "supports_credentials": True
-    }
-})
+# Configure CORS in a more permissive way
+CORS(app, 
+     origins=["https://ai-web3.netlify.app"],
+     methods=["GET", "POST", "OPTIONS"],
+     allow_headers=["Content-Type"],
+     supports_credentials=True,
+     max_age=3600)
 
 # Lazy loading of the model
 generator = None
@@ -26,9 +24,13 @@ def get_generator():
 
 @app.route('/generate', methods=['POST', 'OPTIONS'])
 def generate():
-    # Handle preflight OPTIONS request
+    # Explicitly handle OPTIONS requests
     if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
+        response = jsonify({'status': 'OK'})
+        response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -48,10 +50,24 @@ def generate():
         solidity_code = output[0]['generated_text']
 
         response = jsonify({'code': solidity_code})
-        return response, 200
+        # Explicitly add CORS headers to the response
+        response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        error_response = jsonify({'error': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
+        error_response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return error_response, 500
+
+# Add a health check endpoint
+@app.route('/health', methods=['GET'])
+def health_check():
+    response = jsonify({'status': 'healthy'})
+    response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
