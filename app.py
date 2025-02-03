@@ -4,13 +4,15 @@ from transformers import pipeline
 
 app = Flask(__name__)
 
-# Configure CORS in a more permissive way
-CORS(app, 
-     origins=["https://ai-web3.netlify.app"],
-     methods=["GET", "POST", "OPTIONS"],
-     allow_headers=["Content-Type"],
-     supports_credentials=True,
-     max_age=3600)
+# Enable CORS for Render.com deployment
+# This is more permissive for Render's environment
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",  # Allow all origins
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Lazy loading of the model
 generator = None
@@ -24,13 +26,12 @@ def get_generator():
 
 @app.route('/generate', methods=['POST', 'OPTIONS'])
 def generate():
-    # Explicitly handle OPTIONS requests
+    # Handle preflight requests
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'OK'})
-        response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response = jsonify({'message': 'OK'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         return response
 
     try:
@@ -42,32 +43,27 @@ def generate():
         if not prompt:
             return jsonify({'error': 'No prompt provided'}), 400
 
-        # Get the generator instance (lazy loading)
         gen = get_generator()
-
-        # Generate Solidity code
         output = gen(prompt, max_length=100, num_return_sequences=1, truncation=True)
         solidity_code = output[0]['generated_text']
 
         response = jsonify({'code': solidity_code})
-        # Explicitly add CORS headers to the response
-        response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     except Exception as e:
-        error_response = jsonify({'error': str(e)})
-        error_response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
-        error_response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return error_response, 500
+        response = jsonify({'error': str(e)})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return response, 500
 
-# Add a health check endpoint
 @app.route('/health', methods=['GET'])
 def health_check():
     response = jsonify({'status': 'healthy'})
-    response.headers.add('Access-Control-Allow-Origin', 'https://ai-web3.netlify.app')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
+# Add this for Render.com deployment
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Use the port provided by Render
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
