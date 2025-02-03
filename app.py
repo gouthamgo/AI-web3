@@ -3,12 +3,14 @@ from flask_cors import CORS
 from transformers import pipeline
 
 app = Flask(__name__)
-# Configure CORS with specific origins and options
+
+# Configure CORS to allow requests from your Netlify domain
 CORS(app, resources={
-    r"/generate": {  # Apply to /generate endpoint
-        "origins": ["http://localhost:3000", "https://ai-web3.netlify.app/"],  
-        "methods": ["POST"],  # Allow only POST method
+    r"/*": {  # Apply to all routes
+        "origins": ["https://ai-web3.netlify.app"],  # Your Netlify domain
+        "methods": ["GET", "POST", "OPTIONS"],  # Allow these methods
         "allow_headers": ["Content-Type"],
+        "supports_credentials": True
     }
 })
 
@@ -22,8 +24,13 @@ def get_generator():
         generator = pipeline('text-generation', model='distilgpt2')
     return generator
 
-@app.route('/generate', methods=['POST'])
+@app.route('/generate', methods=['POST', 'OPTIONS'])
 def generate():
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        return response
+
     try:
         data = request.get_json()
         if not data:
@@ -40,10 +47,11 @@ def generate():
         output = gen(prompt, max_length=100, num_return_sequences=1, truncation=True)
         solidity_code = output[0]['generated_text']
 
-        return jsonify({'code': solidity_code}), 200
+        response = jsonify({'code': solidity_code})
+        return response, 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000)
